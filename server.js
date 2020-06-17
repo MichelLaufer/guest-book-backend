@@ -59,11 +59,7 @@ const Book = mongoose.model("Book", {
 })
 
 
-
-// Defines the port the app will run on. Defaults to 8080, but can be 
-// overridden when starting the server. For example:
-//
-//   PORT=9000 npm start
+// Defines the port the app will run on
 const port = process.env.PORT || 8082
 const app = express()
 
@@ -71,10 +67,59 @@ const app = express()
 app.use(cors())
 app.use(bodyParser.json())
 
-// Start defining your routes here
+const authenticateUser = async (req, res, next) => {
+  const user = await User.findOne({ accessToken: req.header('Authorization')})
+  if (user) {
+    req.user = user
+    next()
+  } else {
+    res.status(403).json({ message: "You need to login to access this page"})
+  }
+}
+
+// Start defining the routes
 app.get('/', (req, res) => {
-  res.send('Hello world')
+  res.send('Backend for guest book')
 })
+
+// Create user 
+app.post('/users', async (req, res) => {
+  try {
+    const { name, email, password } = req.body
+    const user = new User({ name, email, password: bcrypt.hashSync(password)})
+    const saved = await user.save()
+    res.status(201).json(saved)
+  } catch (err) {
+    res.status(400).json({ message: 'Could not create user', errors: err.errors })
+  }
+})
+
+// Login session
+app.post('/sessions', async (req, res) => {
+  const user = await User.findOne({ email: req.body.email })
+  if (user && bcrypt.compareSync(req.body.password, user.password)) {
+    res.json({ name: user.name, userId: user._id, accessToken: user.accessToken })
+  } else {
+    // Failure because user doesn't exist or encrypted password doesn't match
+    res.status(400).json({ notFound: true })
+  }
+})
+
+// This will only be shown if the next()-function is called from the middleware
+app.get('/secrets', authenticateUser)
+app.get('/secrets', (req, res) => {
+  res.json({ secret: 'This is a super secret message'})
+})
+
+app.get('/users/:userId', authenticateUser)
+app.get('/users/:userId', (req, res) => {
+  try {
+    res.status(201).json(req.body.user)
+  } catch (err) {
+    res.status(400).json({ message: 'Could not find user', errors: err.errors })
+  }
+})
+
 
 // Start the server
 app.listen(port, () => {
