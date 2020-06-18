@@ -11,6 +11,7 @@ const mongoUrl = process.env.MONGO_URL || "mongodb://localhost/authGuestbook"
 mongoose.connect(mongoUrl, { useNewUrlParser: true, useUnifiedTopology: true })
 mongoose.Promise = Promise
 
+// Creating mongoose models for user and (guest) book
 const User = mongoose.model('User', {
   name: {
     type: String,
@@ -67,6 +68,7 @@ const app = express()
 app.use(cors())
 app.use(bodyParser.json())
 
+// Authenticate users
 const authenticateUser = async (req, res, next) => {
   const user = await User.findOne({ accessToken: req.header('Authorization')})
   if (user) {
@@ -82,6 +84,9 @@ app.get('/', (req, res) => {
   res.send('Backend for guest book')
 })
 
+
+
+// POST routes ///////////////////////////////////////////////////////////////
 // Create user 
 app.post('/users', async (req, res) => {
   try {
@@ -105,6 +110,33 @@ app.post('/sessions', async (req, res) => {
   }
 })
 
+// An individual user posting messages
+app.post('/users/:userId', async (req, res) => {
+  const {message} = req.body
+  const book = new Book({message})
+
+  try {
+    const savedPost = await book.save()
+    res.status(201).json(savedPost)
+  } catch(err) {
+    res.status(400).json({message: 'Could not save post to the database', error: err.errors})
+  }
+})
+
+// An individual user liking messages
+app.post('/users/:userId/:postLiked/like', async (req, res) => {
+  const {postId} = req.params
+  try {
+    await Book.updateOne({'_id': postId}, {'$inc': {'likes': 1}})
+    res.status(201).json()
+  } catch (err) {
+    res.status(400).json({message: 'Could not find the post', error: err.errors})
+  }
+})
+
+
+
+// GET routes /////////////////////////////////////////////////////////////////
 // This will only be shown if the next()-function is called from the middleware
 app.get('/secrets', authenticateUser)
 app.get('/secrets', (req, res) => {
@@ -120,8 +152,70 @@ app.get('/users/:userId', (req, res) => {
   }
 })
 
+app.get('/users/messages', async (req, res) => {
+  const {sort} = req.query
+
+  const sortData = (sort) => {
+    if (sort === 'dates') {
+      return {createdAt: 'asc'}
+    } else if (sort === 'likes') {
+      return {likes: 'desc'}
+    } else {
+      return {createdAt: 'desc'}
+    }
+  }
+
+  let messages = await Book.find().sort(sortData(sort)).limit(20).exec()
+  res.json(messages)
+})
+
 
 // Start the server
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`)
 })
+
+
+
+
+// Paste this code above and re-write it
+// app.get('/', async (req, res) => {
+//   const {sort} = req.query
+
+//   const sortData = (sort) => {
+//     if (sort === 'dates') {
+//       return {createdAt: 'asc'}
+//     } else if (sort === 'likes') {
+//       return {likes: 'desc'}
+//     } else {
+//       return {createdAt: 'desc'}
+//     }
+//   }
+
+//   let messages = await Book.find().sort(sortData(sort)).limit(20).exec()
+//   res.json(messages)
+// })
+
+// Retrieve the information sent by the client to our API endpoint
+// app.post('/', async (req, res) => {
+//   const {message} = req.body
+//   const book = new Book({message})
+
+//   try {
+//     const savedPost = await book.save()
+//     res.status(201).json(savedPost)
+//   } catch(err) {
+//     res.status(400).json({message: 'Could not save post to the database', error: err.errors})
+//   }
+// })
+
+// app.post('/:postLiked/like', async (req, res) => {
+//   const {postId} = req.params
+//   try {
+//     await Book.updateOne({'_id': thoughtId}, {'$inc': {'likes': 1}})
+//     res.status(201).json()
+//   } catch (err) {
+//     res.status(400).json({message: 'Could not find the post', error: err.errors})
+//   }
+// })
+
